@@ -4,7 +4,6 @@
 - 명령(cmd)과 이벤트(evt)는 모두 고유 ID를 가진다.
   * cmd_id : 같은 명령이 두 번 와도 장비가 한 번만 실행하도록(멱등성)
   * evt_id : 통신 복구 후 재전송된 이벤트를 서버가 중복 처리하지 않도록
-- 현장 관제 모드(현장 장비 위치 수신)는 NMEA 스타일 ASCII 한 줄 프로토콜을 쓴다.
 """
 from __future__ import annotations
 
@@ -99,53 +98,3 @@ class Event:
     def from_json(raw: str | bytes) -> "Event":
         d = json.loads(raw)
         return Event(**d)
-
-
-# ---------------------------------------------------------------------------
-# 현장 장비 위치 프로토콜 (현장 관제 모드)
-#   $POS,<id>,<lat>,<lon>,<speed_kmh>,<heading_deg>*<XOR 체크섬 2자리 hex>
-#   예) $POS,UNIT-01,37.3915,126.6450,12.5,90*5A
-# 시리얼/UDP/TCP 모두 같은 형식을 쓴다. 줄 단위(\n) 구분.
-# ---------------------------------------------------------------------------
-def nmea_checksum(body: str) -> str:
-    cs = 0
-    for ch in body.encode("ascii"):
-        cs ^= ch
-    return f"{cs:02X}"
-
-
-def encode_pos(unit: str, lat: float, lon: float, speed: float, heading: float) -> str:
-    body = f"POS,{unit},{lat:.6f},{lon:.6f},{speed:.1f},{heading:.0f}"
-    return f"${body}*{nmea_checksum(body)}"
-
-
-@dataclass
-class PosReport:
-    unit: str
-    lat: float
-    lon: float
-    speed: float
-    heading: float
-
-
-class FrameError(ValueError):
-    pass
-
-
-def decode_pos(line: str) -> PosReport:
-    line = line.strip()
-    if not line.startswith("$") or "*" not in line:
-        raise FrameError("frame must start with $ and contain *")
-    body, cs = line[1:].rsplit("*", 1)
-    if nmea_checksum(body) != cs.upper():
-        raise FrameError(f"checksum mismatch (got {cs}, want {nmea_checksum(body)})")
-    fields = body.split(",")
-    if fields[0] != "POS" or len(fields) != 6:
-        raise FrameError("not a POS sentence")
-    try:
-        lat, lon, spd, hdg = (float(x) for x in fields[2:])
-    except ValueError as e:
-        raise FrameError(f"bad number: {e}") from e
-    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-        raise FrameError("coordinate out of range")
-    return PosReport(fields[1], lat, lon, spd, hdg)

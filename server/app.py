@@ -2,15 +2,12 @@
 
 실행: uvicorn server.app:app --port 8080
   /dock   도크 자동화 관제 화면
-  /field  현장 장비 오프라인 지도 화면 (현장 관제 모드)
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import os
-import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,7 +19,6 @@ from common.protocol import Command, Event, parse_topic, topic_cmd
 from server import config
 from server.adapters import formats  # noqa: F401  (어댑터 등록)
 from server.adapters.base import TMS_ADAPTERS, WMS_ADAPTERS, AdapterError, normalize_dock
-from server.field import FieldTracker, start_serial, start_tcp, start_udp
 from server.orchestrator import Orchestrator
 from server.store import Store
 
@@ -35,7 +31,6 @@ class Hub:
 
     def __init__(self) -> None:
         self.dock: dict[str, set[WebSocket]] = {}
-        self.field: set[WebSocket] = set()
         self.dirty: set[str] = set()
 
     def touch(self, tenant: str) -> None:
@@ -104,43 +99,29 @@ async def lifespan(app: FastAPI):
     bridge_ref["b"] = bridge
     bridge.start()
 
-    tracker = FieldTracker(config.FIELD_LOST_AFTER)
-    closers = []
-    if config.FIELD_ENABLED:
-        closers.append(await start_udp(tracker, config.FIELD_UDP_PORT))
-        closers.append(await start_tcp(tracker, config.FIELD_TCP_PORT))
-        if config.FIELD_SERIAL:
-            start_serial(tracker, config.FIELD_SERIAL, config.FIELD_BAUD, loop)
 
-    app.state.orch, app.state.hub, app.state.tracker = orch, hub, tracker
-    tasks = [asyncio.create_task(_sweeper(orch, tracker, hub)),
-             asyncio.create_task(_pusher(orch, tracker, hub))]
+    app.state.orch, app.state.hub = orch, hub
+    tasks = [asyncio.create_task(_sweeper(orch, hub)),
+             asyncio.create_task(_pusher(orch, hub))]
     yield
     for t in tasks:
         t.cancel()
-    for c in closers:
-        c.close()
     bridge.stop()
 
 
-async def _sweeper(orch: Orchestrator, tracker: FieldTracker, hub: Hub) -> None:
+async def _sweeper(orch: Orchestrator, hub: Hub) -> None:
     while True:
         await asyncio.sleep(1)
         if orch.sweep():
             hub.dirty.update(config.TENANTS)
-        tracker.sweep()
 
 
-async def _pusher(orch: Orchestrator, tracker: FieldTracker, hub: Hub) -> None:
-    field_ver = -1
+async def _pusher(orch: Orchestrator, hub: Hub) -> None:
     while True:
         await asyncio.sleep(0.3)
         for tenant in list(hub.dirty):
             hub.dirty.discard(tenant)
             await _broadcast(hub.dock.get(tenant, set()), orch.snapshot(tenant))
-        if tracker.version != field_ver:
-            field_ver = tracker.version
-            await _broadcast(hub.field, tracker.snapshot())
 
 
 async def _broadcast(clients: set[WebSocket], data: dict) -> None:
@@ -180,11 +161,6 @@ def root():
 @app.get("/dock")
 def dock_page():
     return FileResponse(STATIC / "dock.html")
-
-
-@app.get("/field")
-def field_page():
-    return FileResponse(STATIC / "field.html")
 
 
 # --------------------------------------------------------------------------- 상위 시스템 연동 API
@@ -288,47 +264,3 @@ async def ws_dock(ws: WebSocket, tenant: str):
             await ws.receive_text()
     except WebSocketDisconnect:
         hub.dock[tenant].discard(ws)
-
-
-# --------------------------------------------------------------------------- 현장 지도 (현장 관제 모드)
-@app.get("/api/field/units")
-def field_units(request: Request):
-    return request.app.state.tracker.snapshot()
-
-
-@app.websocket("/ws/field")
-async def ws_field(ws: WebSocket):
-    await ws.accept()
-    ws.app.state.hub.field.add(ws)
-    await ws.send_json(ws.app.state.tracker.snapshot())
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        ws.app.state.hub.field.discard(ws)
-
-
-@app.get("/api/field/tiles/info")
-def tiles_info():
-    path = config.MBTILES_PATH
-    if not os.path.exists(path):
-        return {"available": False}
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
-        meta = dict(db.execute("SELECT name, value FROM metadata").fetchall())
-    return {"available": True, **{k: meta.get(k) for k in ("name", "minzoom", "maxzoom", "bounds", "center")}}
-
-
-@app.get("/tiles/{z}/{x}/{y}.png")
-def tile(z: int, x: int, y: int):
-    """MBTiles(SQLite) 파일에서 타일을 꺼내 준다. 인터넷 연결 불필요.
-    MBTiles는 TMS 좌표계라 y를 뒤집는다."""
-    path = config.MBTILES_PATH
-    if not os.path.exists(path):
-        raise HTTPException(404)
-    tms_y = (1 << z) - 1 - y
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
-        row = db.execute("SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
-                         (z, x, tms_y)).fetchone()
-    if not row:
-        return Response(status_code=204)
-    return Response(row[0], media_type="image/png", headers={"Cache-Control": "max-age=86400"})

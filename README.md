@@ -7,12 +7,7 @@
 창고 관리 시스템(WMS)의 출고 오더와 운송 관리 시스템(TMS)의 배차를 합쳐 도크 작업을 만들고,
 로봇(AMR)이 짐을 가져오면 트럭 적재함의 컨트롤박스에 적재 명령을 내린 뒤, 결과를 다시 상위 시스템에 보고합니다.
 
-같은 코드베이스에 **현장 장비 위치 관제 모드**가 들어 있습니다. 시리얼·UDP·TCP로 들어오는 장비 위치를
-**인터넷 없이 오프라인 지도**에 표시합니다.
-
-| 도크 관제 화면 `/dock` | 현장 장비 오프라인 지도 `/field` |
-|---|---|
-| ![dock](docs/images/dock-console.png) | ![field](docs/images/field-map.png) |
+![dock](docs/images/dock-console.png)
 
 ---
 
@@ -27,8 +22,6 @@
                                                           │
                                                WebSocket  ▼
                                                  [관제 화면 /dock]
-
-[현장 장비] ─ 시리얼(RS-232C) / UDP / TCP ─ $POS,...*CS ─> [수신기] ─WebSocket─> [오프라인 지도 /field]
 ```
 
 | 영역 | 파일 | 내용 |
@@ -39,19 +32,17 @@
 | | `agent/actuator.py` | 구동부 추상화 (PC 모의 / 라즈베리파이 GPIO) |
 | 서버 | `server/orchestrator.py` | 오더·배차 매칭, 작업 상태, ACK 재전송, 경보, 결과 보고, 사용량 |
 | | `server/adapters/` | 고객사별 WMS·TMS 형식을 공통 모델로 변환 |
-| | `server/field.py` | 시리얼·UDP·TCP 수신, 프레임 검증, 장비별 통신 상태 |
-| | `server/app.py` | REST API, WebSocket, MQTT 브리지, MBTiles 타일 서빙 |
-| 화면 | `server/static/` | 도크 관제, 오프라인 지도 (빌드 없는 순수 HTML/JS, 외부 CDN 없음) |
-| 시험 | `sim/`, `tests/` | 상위 시스템·로봇·현장 장비 시뮬레이터, 단위 테스트 27개 |
+| | `server/app.py` | REST API, WebSocket, MQTT 브리지 |
+| 화면 | `server/static/` | 도크 관제 화면 (빌드 없는 순수 HTML/JS, 외부 CDN 없음) |
+| 시험 | `sim/`, `tests/` | 상위 시스템·로봇 시뮬레이터, 단위 테스트 |
 
 ## 빠른 실행
 
 **Docker**
 ```bash
 docker compose up --build
-# 관제 http://localhost:8080/dock   지도 http://localhost:8080/field
+# 관제 http://localhost:8080/dock
 python -m sim.scenario --tenant acme --truck TRK-01 --dock 5     # 작업 1건 발생
-python -m sim.field_devices                                      # 현장 장비 3대 송신
 ```
 
 **Docker 없이 (Python 3.11+)**
@@ -63,7 +54,7 @@ python -m sim.scenario --tenant acme --truck TRK-01 --dock 5
 
 ## 시연 시나리오
 
-단축 명령: `./demo.sh start` · `job` · `job hanbit` · `cut` · `estop` · `resume` · `drop` · `stop` (`./demo.sh help`)
+단축 명령: `./demo.sh start` · `job` · `job hanbit` · `cut` · `estop` · `resume` · `stop` (`./demo.sh help`)
 
 | # | 할 일 | 보이는 것 |
 |---|---|---|
@@ -72,10 +63,7 @@ python -m sim.scenario --tenant acme --truck TRK-01 --dock 5
 | 3 | 다시 `kill -USR1` (케이블 연결) | 쌓인 이벤트가 **순서대로 재전송**, 작업이 유실 없이 완료, 경보 자동 해제 |
 | 4 | 적재 중 `kill -USR2` (보드의 비상정지 버튼) | 모터 즉시 정지, **치명 경보**, 작업 HALTED → 해제 후 **남은 수량만 재개** |
 | 5 | 화면 우상단에서 B사 선택 | 박스 단위 WMS가 팔레트로 환산되어 같은 흐름으로 처리, A사 데이터와 분리 |
-| 6 | `sim.field_devices --drop UNIT-02 --drop-after 20 --noise 0.05` | 시리얼·UDP·TCP 장비가 한 지도에 표시, 체크섬 오류 프레임 차단, 송신 중단 장비 통신 두절 표시 |
 
-가상 시리얼 포트: `socat -d -d pty,raw,echo=0,link=/tmp/ttyV0 pty,raw,echo=0,link=/tmp/ttyV1` 후
-서버는 `FIELD_SERIAL=/tmp/ttyV1`, 시뮬레이터는 `--serial /tmp/ttyV0`.
 
 ## 설계 결정
 
@@ -86,22 +74,15 @@ python -m sim.scenario --tenant acme --truck TRK-01 --dock 5
 | [0003 멱등성](docs/adr/0003-idempotency.md) | 명령은 cmd_id, 이벤트는 evt_id로 중복을 무해하게 만든다 |
 | [0004 어댑터 구조](docs/adr/0004-adapter-per-customer.md) | 고객사 형식 차이는 어댑터가 흡수, 코어는 공통 모델만 안다 |
 | [0005 멀티테넌트·과금 근거](docs/adr/0005-tenancy-and-metering.md) | 모든 데이터에 tenant, 완료 작업 기준 사용량 집계 |
-| [0006 오프라인 지도](docs/adr/0006-offline-map.md) | 폐쇄망: 라이브러리와 타일을 모두 로컬에 둔다 (MBTiles) |
 
 ## 테스트
 
 ```bash
-python -m pytest -q      # 27 passed
+python -m pytest -q      # 18 passed
 ```
 상태머신, 명령 중복, 통신 단절 후 순서 보장, 비상정지·재개, ACK 미수신 재전송, 하트비트 만료·복구,
-고객사 데이터 분리, 중복 이벤트의 과금 이중 집계 방지, 프레임 체크섬, TCP 부분 수신, MBTiles 좌표 변환.
+고객사 데이터 분리, 중복 이벤트의 과금 이중 집계 방지.
 GitHub Actions가 push마다 테스트와 Docker 빌드를 수행합니다 (`.github/workflows/ci.yml`).
-
-## 오프라인 지도 타일
-
-`data/map.mbtiles`(래스터 PNG MBTiles) 파일을 두면 `/field`가 그 지도를 씁니다. 없으면 위경도 격자로 표시합니다.
-- 공개 벡터 데이터(예: OpenStreetMap 지역 추출본)를 QGIS 등으로 렌더링해 MBTiles로 만든다.
-- **OSM 공식 타일 서버에서 대량으로 내려받는 것은 이용 정책 위반**이므로 쓰지 않는다.
 
 ## 한계와 다음 단계 (의도적으로 범위 밖)
 

@@ -63,22 +63,15 @@ for job in halted:
     print(f"작업 {job['job_id']} 재개 ({job['done']}/{job['pallets']}부터)")
 PYEOF
     ;;
-  drop)       # 현장 장비 UNIT-02가 20초 뒤 송신 중단 → 지도에 통신 두절
-    kill "$(pid_of 5)" 2>/dev/null
-    $PY -m sim.field_devices --drop UNIT-02 --drop-after 20 --noise 0.05 > logs/field.log 2>&1 &
-    NEW=$!; sed -i.bak "5s/.*/$NEW/" logs/pids && rm -f logs/pids.bak
-    echo "현장 장비 재시작: 20초 뒤 UNIT-02 송신 중단, 체크섬 오류 프레임 5% 섞음"
-    ;;
   *)
     cat <<'HELP'
-./demo.sh start            데모 초기화 후 시작 (브라우저: localhost:8080/dock, /field)
+./demo.sh start            데모 초기화 후 시작 (브라우저: localhost:8080/dock)
 ./demo.sh job              A사(acme) 작업 1건 발생
 ./demo.sh job hanbit       B사(hanbit) 작업 1건 발생
 ./demo.sh cut              TRK-01 통신 끊기 (한 번 더 입력하면 복구)
                            ※ 팔레트 1개 2초 = 적재 10초. 빠르게: DEMO_STEP=1 ./demo.sh start
 ./demo.sh estop            TRK-01 비상정지 버튼
 ./demo.sh resume           비상정지 해제 + 남은 수량 재개
-./demo.sh drop             현장 장비 1대 송신 중단 → 지도에 통신 두절
 ./demo.sh stop             데모 종료
 HELP
     ;;

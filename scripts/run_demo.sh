@@ -14,9 +14,7 @@ python3 -m uvicorn server.app:app --port 8080 > logs/server.log 2>&1 & echo $! >
 sleep 3
 python3 -m agent.agent --tenant acme   --truck TRK-01 --step "${DEMO_STEP:-2}" > logs/truck1.log 2>&1 & echo $! >> logs/pids
 python3 -m agent.agent --tenant hanbit --truck TRK-02 --step "${DEMO_STEP:-2}" > logs/truck2.log 2>&1 & echo $! >> logs/pids
-python3 -m sim.field_devices --noise 0.03 > logs/field.log 2>&1 & echo $! >> logs/pids
 echo "관제:  http://localhost:8080/dock"
-echo "지도:  http://localhost:8080/field"
 echo "작업 발생: python3 -m sim.scenario --tenant acme --truck TRK-01 --dock 5"
 echo "통신 단절/복구: kill -USR1 \$(sed -n 3p logs/pids)    현장 비상정지: kill -USR2 \$(sed -n 3p logs/pids)"
 echo "종료:  ./scripts/stop_demo.sh"

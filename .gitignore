@@ -3,7 +3,6 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
-data/*.mbtiles
 .pytest_cache/
 .venv/
 logs/
