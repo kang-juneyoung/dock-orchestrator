@@ -1,6 +1,6 @@
 """관제 서버 (FastAPI).
 
-실행: uvicorn server.app:app --port 8000
+실행: uvicorn server.app:app --port 8080
   /dock   도크 자동화 관제 화면
   /field  현장 장비 오프라인 지도 화면 (현장 관제 모드)
 """

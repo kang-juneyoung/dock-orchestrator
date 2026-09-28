@@ -49,7 +49,7 @@
 **Docker**
 ```bash
 docker compose up --build
-# 관제 http://localhost:8000/dock   지도 http://localhost:8000/field
+# 관제 http://localhost:8080/dock   지도 http://localhost:8080/field
 python -m sim.scenario --tenant acme --truck TRK-01 --dock 5     # 작업 1건 발생
 python -m sim.field_devices                                      # 현장 장비 3대 송신
 ```
@@ -62,6 +62,8 @@ python -m sim.scenario --tenant acme --truck TRK-01 --dock 5
 ```
 
 ## 시연 시나리오
+
+단축 명령: `./demo.sh start` · `job` · `job hanbit` · `cut` · `estop` · `resume` · `drop` · `stop` (`./demo.sh help`)
 
 | # | 할 일 | 보이는 것 |
 |---|---|---|

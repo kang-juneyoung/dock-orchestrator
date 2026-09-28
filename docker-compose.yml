@@ -1,4 +1,4 @@
-# docker compose up --build  ->  http://localhost:8000/dock , /field
+# docker compose up --build  ->  http://localhost:8080/dock , /field
 services:
   mqtt:
     image: eclipse-mosquitto:2
@@ -11,7 +11,7 @@ services:
       MQTT_HOST: mqtt
       DB_PATH: /data/orchestrator.db
       MBTILES_PATH: /data/map.mbtiles
-    ports: ["8000:8000", "5600:5600/udp", "5601:5601"]
+    ports: ["8080:8000", "5600:5600/udp", "5601:5601"]
     volumes: ["./data:/data"]
     depends_on: [mqtt]
 

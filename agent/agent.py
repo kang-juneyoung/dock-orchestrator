@@ -216,6 +216,11 @@ class MqttLink:
         log.warning("MQTT disconnected (%s) - 이벤트는 로컬에 저장됩니다", reason_code)
 
     def _on_message(self, client, userdata, msg) -> None:
+        # 구독한 명령 토픽이 아닌 메시지는 버린다 (개발용 amqtt 브로커가 재접속 시
+        # 다른 토픽의 retained 상태 메시지를 섞어 보내는 경우가 있어 방어)
+        if msg.topic != topic_cmd(self.tenant, self.truck):
+            log.debug("ignored message on unexpected topic %s", msg.topic)
+            return
         if self.agent:
             self.agent.handle_command(msg.payload)
 

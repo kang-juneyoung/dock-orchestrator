@@ -6,3 +6,5 @@ __pycache__/
 data/*.mbtiles
 .pytest_cache/
 .venv/
+logs/
+.DS_Store

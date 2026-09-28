@@ -25,7 +25,7 @@ def post(base: str, path: str, key: str, body: bytes, ctype: str) -> dict:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--base", default="http://127.0.0.1:8000")
+    p.add_argument("--base", default="http://127.0.0.1:8080")
     p.add_argument("--tenant", default="acme")
     p.add_argument("--truck", default="TRK-01")
     p.add_argument("--dock", type=int, default=5)
