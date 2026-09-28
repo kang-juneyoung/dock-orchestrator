@@ -1,0 +1,28 @@
+# docker compose up --build  ->  http://localhost:8000/dock , /field
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports: ["1883:1883"]
+    volumes: ["./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro"]
+
+  server:
+    build: .
+    environment:
+      MQTT_HOST: mqtt
+      DB_PATH: /data/orchestrator.db
+      MBTILES_PATH: /data/map.mbtiles
+    ports: ["8000:8000", "5600:5600/udp", "5601:5601"]
+    volumes: ["./data:/data"]
+    depends_on: [mqtt]
+
+  truck-01:
+    build: .
+    command: python -m agent.agent --tenant acme --truck TRK-01 --broker mqtt --db /data/agent_TRK-01.db
+    volumes: ["./data:/data"]
+    depends_on: [mqtt]
+
+  truck-02:
+    build: .
+    command: python -m agent.agent --tenant hanbit --truck TRK-02 --broker mqtt --db /data/agent_TRK-02.db
+    volumes: ["./data:/data"]
+    depends_on: [mqtt]

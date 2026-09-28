@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dock Console</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --ok: #1f8a4c; --warn: #b7791f; --bad: #c53030; --info: #2b6cb0; --busy: #6b46c1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+         background: var(--bg); color: var(--ink); font-size: 14px; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: #1d2330; color: #fff; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+  header .sub { color: #aab2c0; font-size: 12px; }
+  header select { margin-left: auto; padding: 4px 8px; border-radius: 6px; border: 0; }
+  #conn { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #444c5c; }
+  #conn.on { background: var(--ok); }
+  main { display: grid; grid-template-columns: 1fr 360px; gap: 16px; padding: 16px 20px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+  .trucks { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .truck { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .truck.offline { background: #fff5f5; border-color: #feb2b2; }
+  .truck .name { font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; color: #fff; font-weight: 700; }
+  .s-IDLE { background: #718096; } .s-LOADING, .s-UNLOADING { background: var(--busy); }
+  .s-LOADED { background: var(--ok); } .s-ESTOP, .s-FAULT { background: var(--bad); }
+  .s-OFFLINE { background: #a0aec0; }
+  .meta { color: var(--muted); font-size: 12px; margin: 6px 0 10px; line-height: 1.6; }
+  .btns { display: flex; gap: 6px; }
+  button { font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line);
+           background: #fff; cursor: pointer; }
+  button:hover { background: #f0f2f5; }
+  button.danger { background: var(--bad); color: #fff; border-color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .bar { height: 6px; background: #edf0f4; border-radius: 3px; overflow: hidden; width: 110px; display: inline-block; vertical-align: middle; }
+  .bar i { display: block; height: 100%; background: var(--busy); }
+  .j-COMPLETED .bar i { background: var(--ok); } .j-HALTED .bar i, .j-FAILED .bar i { background: var(--bad); }
+  .st { font-size: 11px; font-weight: 700; }
+  .j-COMPLETED .st { color: var(--ok); } .j-HALTED .st, .j-FAILED .st { color: var(--bad); }
+  .j-LOADING .st, .j-DISPATCHED .st { color: var(--busy); } .j-WAITING_GOODS .st { color: var(--warn); }
+  .alarm { border-left: 4px solid var(--warn); padding: 6px 10px; margin-bottom: 6px; background: #fffaf0; font-size: 13px; }
+  .alarm.critical { border-color: var(--bad); background: #fff5f5; }
+  .alarm.cleared { opacity: .45; background: #f7f7f7; border-color: #cbd5e0; }
+  .alarm time, .rep time { color: var(--muted); font-size: 11px; display: block; }
+  .rep { font-size: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .rep b { color: var(--info); }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .empty { color: var(--muted); font-size: 13px; }
+  details { font-size: 13px; } details summary { cursor: pointer; color: var(--muted); }
+  .demo { display: grid; gap: 6px; margin-top: 8px; } .demo input { padding: 5px; border: 1px solid var(--line); border-radius: 6px; }
+  .note { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Dock Orchestration Console</h1>
+    <div class="sub">WMS · TMS · AMR ↔ 트럭 컨트롤박스 실시간 관제 (개인 포트폴리오 · 시뮬레이션)</div>
+  </div>
+  <span id="conn">연결 중</span>
+  <select id="tenant"></select>
+</header>
+
+<main>
+  <div class="col">
+    <section><h2>트럭 컨트롤박스</h2><div id="trucks" class="trucks"></div></section>
+    <section>
+      <h2>도크 작업</h2>
+      <table>
+        <thead><tr><th>작업</th><th>도크</th><th>트럭</th><th>오더</th><th>진행</th><th>상태</th><th></th></tr></thead>
+        <tbody id="jobs"></tbody>
+      </table>
+    </section>
+    <section>
+      <h2>대기 중인 입력</h2>
+      <div id="waiting" class="meta"></div>
+    </section>
+  </div>
+  <div class="col">
+    <section><h2>경보</h2><div id="alarms"></div></section>
+    <section><h2>상위 시스템 결과 보고</h2><div id="reports"></div></section>
+    <section>
+      <details>
+        <summary>데모 입력 (WMS / TMS / AMR 흉내)</summary>
+        <div class="demo">
+          <input id="key" placeholder="API Key">
+          <button onclick="demoOrder()">WMS 출고 오더 전송</button>
+          <button onclick="demoDispatch()">TMS 배차 CSV 전송</button>
+          <button onclick="demoAmr()">AMR 짐 도착 (D05)</button>
+          <span class="note">실제 연동은 sim/ 폴더의 스크립트로 시험합니다.</span>
+        </div>
+      </details>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hhmmss = (t) => t ? new Date(t * 1000).toLocaleTimeString("ko-KR", {hour12: false}) : "";
+const DEMO_KEYS = {acme: "acme-demo-key", hanbit: "hanbit-demo-key"};
+let ws, tenant;
+
+async function init() {
+  const list = await (await fetch("/api/tenants")).json();
+  $("tenant").innerHTML = list.map((t) => `<option value="${t.id}">${esc(t.name)} (${t.id})</option>`).join("");
+  $("tenant").onchange = () => connect($("tenant").value);
+  connect(list[0].id);
+}
+
+function connect(t) {
+  tenant = t;
+  $("key").value = DEMO_KEYS[t] || "";
+  if (ws) { ws.onclose = null; ws.close(); }
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/dock/${t}`);
+  ws.onopen = () => { $("conn").textContent = "실시간"; $("conn").className = "on"; };
+  ws.onclose = () => { $("conn").textContent = "재연결 중"; $("conn").className = ""; setTimeout(() => connect(tenant), 1500); };
+  ws.onmessage = (m) => render(JSON.parse(m.data));
+}
+
+function render(d) {
+  $("trucks").innerHTML = d.trucks.length ? d.trucks.map((t) => {
+    const st = t.online ? t.state : "OFFLINE";
+    const age = Math.max(0, d.ts - t.last_seen).toFixed(0);
+    return `<div class="truck ${t.online ? "" : "offline"}">
+      <div class="name">${esc(t.truck)} <span class="badge s-${esc(st)}">${esc(st)}</span></div>
+      <div class="meta">적재 ${t.load_count} PLT · 마지막 수신 ${age}초 전<br>
+        장비 미전송 이벤트 ${t.pending}건 ${t.online ? "" : "· <b style='color:var(--bad)'>통신 두절</b>"}</div>
+      <div class="btns">
+        <button class="danger" onclick="act('${esc(t.truck)}','estop')">비상정지</button>
+        <button onclick="act('${esc(t.truck)}','reset')">해제</button>
+      </div></div>`;
+  }).join("") : `<div class="empty">연결된 컨트롤박스가 없습니다. agent를 실행하세요.</div>`;
+
+  $("jobs").innerHTML = d.jobs.length ? d.jobs.map((j) => {
+    const pct = j.pallets ? Math.round(100 * j.done / j.pallets) : 0;
+    return `<tr class="j-${esc(j.status)}">
+      <td>${esc(j.job_id)}</td><td>${esc(j.dock)}</td><td>${esc(j.truck)}</td><td>${esc(j.order_id)}</td>
+      <td><span class="bar"><i style="width:${pct}%"></i></span> ${j.done}/${j.pallets}</td>
+      <td><span class="st">${esc(j.status)}</span>${j.note ? `<br><span class="note">${esc(j.note)}</span>` : ""}</td>
+      <td>${j.status === "HALTED" ? `<button onclick="resume('${esc(j.job_id)}')">재개</button>` : ""}</td></tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">작업이 없습니다.</td></tr>`;
+
+  const w = [...d.orders.map((o) => `오더 ${esc(o.order_id)} → ${esc(o.dock)} (${o.pallets} PLT) · 트럭 배차 대기`),
+             ...d.dispatches.map((x) => `트럭 ${esc(x.truck)} → ${esc(x.dock)} · 출고 오더 대기`)];
+  $("waiting").innerHTML = w.length ? w.join("<br>") : "없음";
+
+  $("alarms").innerHTML = d.alarms.length ? d.alarms.map((a) =>
+    `<div class="alarm ${esc(a.level)} ${a.cleared ? "cleared" : ""}">${esc(a.message)}
+      <time>${hhmmss(a.ts)}${a.cleared ? " · 해제 " + hhmmss(a.cleared) : ""}</time></div>`).join("")
+    : `<div class="empty">경보 없음</div>`;
+
+  $("reports").innerHTML = d.reports.length ? d.reports.map((r) =>
+    `<div class="rep"><b>→ ${esc(r.target)}</b> ${esc(r.body.event)} · 오더 ${esc(r.body.order_id)} · ${esc(r.body.truck)}
+      <time>${hhmmss(r.ts)}</time></div>`).join("") : `<div class="empty">보고 내역 없음</div>`;
+}
+
+async function act(truck, kind) { await fetch(`/api/${tenant}/trucks/${truck}/${kind}`, {method: "POST"}); }
+async function resume(job) { await fetch(`/api/${tenant}/jobs/${job}/resume`, {method: "POST"}); }
+
+let seq = 1000;
+async function post(path, body, type = "application/json") {
+  const r = await fetch(`/api/${tenant}/${path}`, {method: "POST", body,
+    headers: {"Content-Type": type, "X-API-Key": $("key").value}});
+  if (!r.ok) alert(`${r.status} ${await r.text()}`);
+}
+function demoOrder() {
+  seq++;
+  const body = tenant === "acme"
+    ? {outboundOrder: {orderNo: `SO-${seq}`, dockDoor: "D-05", lines: [{sku: "A-100", palletQty: 3}, {sku: "A-200", palletQty: 2}]}}
+    : {order_id: `B-${seq}`, gate: "Gate 5", items: [{code: "X-1", qty: 80, unit: "BOX"}, {code: "Y-2", qty: 2, unit: "PLT"}]};
+  post("wms/orders", JSON.stringify(body));
+}
+function demoDispatch() { post("tms/dispatches", "truck_no,dock,eta\nTRK-01,5,2026-09-24T09:00", "text/csv"); }
+function demoAmr() {
+  post("amr/state", JSON.stringify({serialNumber: "AMR-07", nodeId: "D05",
+    actionStates: [{actionType: "drop", actionStatus: "FINISHED"}]}));
+}
+init();
+</script>
+</body>
+</html>
